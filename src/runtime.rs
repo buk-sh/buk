@@ -1,6 +1,7 @@
 use crate::bun_api::BunAPI;
 use crate::console::ConsoleAPI;
 use crate::http_native::HttpNativeFramework;
+use crate::require::{RequireAPI, set_current_dir};
 use crate::server::BunServer;
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
@@ -55,6 +56,7 @@ impl JsRuntime {
         BunAPI::init(scope, global);
         BunServer::init(scope, global);
         HttpNativeFramework::init(scope, global);
+        RequireAPI::init(scope, global);
     }
 
     pub fn execute_cached(&mut self, name: &str, source: &str) -> Result<()> {
@@ -88,6 +90,48 @@ impl JsRuntime {
 
     pub async fn execute(&mut self, source: &str) -> Result<()> {
         self.execute_cached("<script>", source)
+    }
+
+    pub async fn execute_file(&mut self, filename: &str, source: &str) -> Result<()> {
+        let context = self.context.clone();
+        let scope = &mut v8::HandleScope::with_context(&mut self.isolate, context);
+
+        let path = std::path::Path::new(filename);
+        let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+        let dir = canonical.parent().and_then(|p| p.to_str()).unwrap_or(".");
+        let file = canonical.file_name().and_then(|n| n.to_str()).unwrap_or(filename);
+        let canonical_str = canonical.to_str().unwrap_or(filename);
+
+        set_current_dir(dir);
+
+        let wrapped = format!(
+            "(function() {{\nconst __dirname = '{}';\nconst __filename = '{}';\n{}\n}})()",
+            dir, canonical_str, source
+        );
+
+        let code = v8::String::new(scope, &wrapped)
+            .ok_or_else(|| anyhow!("Failed to create string"))?;
+        
+        let resource_name = v8::String::new(scope, filename).unwrap();
+        let undefined_val = v8::undefined(scope);
+        let origin = v8::ScriptOrigin::new(
+            scope,
+            resource_name.into(),
+            0,
+            0,
+            false,
+            0,
+            undefined_val.into(),
+            false,
+            false,
+            false,
+        );
+
+        let script = v8::Script::compile(scope, code, Some(&origin))
+            .ok_or_else(|| anyhow!("Failed to compile script"))?;
+        
+        script.run(scope);
+        Ok(())
     }
 
     pub fn execute_optimized(&mut self, source: &str, optimize_for_size: bool) -> Result<()> {

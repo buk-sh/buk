@@ -6,6 +6,7 @@ mod http_native;
 mod module;
 mod package_json;
 mod package_manager;
+mod require;
 mod runtime;
 mod server;
 mod typescript;
@@ -245,7 +246,7 @@ async fn run_file(filename: &str, command: &str) -> Result<()> {
             runtime.execute(server_code).await?;
 
             // Run user code
-            runtime.execute(&js_code).await?;
+            runtime.execute_file(&filename, &js_code).await?;
 
             // Keep alive
             println!("Server running. Press Ctrl+C to stop.");
@@ -254,12 +255,12 @@ async fn run_file(filename: &str, command: &str) -> Result<()> {
         "test" => {
             // Run tests
             println!("Running tests...");
-            runtime.execute(&js_code).await?;
+            runtime.execute_file(&filename, &js_code).await?;
             println!("Tests complete");
         }
         _ => {
             // Normal run
-            runtime.execute(&js_code).await?;
+            runtime.execute_file(&filename, &js_code).await?;
         }
     }
 

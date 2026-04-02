@@ -344,43 +344,59 @@ impl PackageManager {
     }
 
     /// Resolve package path from node_modules
-    pub fn resolve_package(&self, name: &str) -> Result<String> {
-        let node_modules = Path::new("node_modules");
+    pub fn resolve_package_in_dir(name: &str, from_dir: &Path) -> Result<String> {
+        let mut current = from_dir.to_path_buf();
         
-        // Handle scoped packages
-        let package_dir = if name.starts_with('@') {
-            let parts: Vec<&str> = name.splitn(2, '/').collect();
-            node_modules.join(parts[0]).join(parts[1])
-        } else {
-            node_modules.join(name)
-        };
-        
-        if !package_dir.exists() {
-            return Err(anyhow!("Package not found: {}", name));
-        }
-
-        let package_json = package_dir.join("package.json");
-        if package_json.exists() {
-            let content = fs::read_to_string(package_json)?;
-            let pkg: serde_json::Value = serde_json::from_str(&content)?;
+        loop {
+            let node_modules = current.join("node_modules");
             
-            let main = pkg.get("main")
-                .and_then(|m| m.as_str())
-                .unwrap_or("index.js");
+            if node_modules.exists() {
+                let package_dir = if name.starts_with('@') {
+                    let parts: Vec<&str> = name.splitn(2, '/').collect();
+                    if parts.len() == 2 {
+                        node_modules.join(parts[0]).join(parts[1])
+                    } else {
+                        return Err(anyhow!("Invalid scoped package name: {}", name));
+                    }
+                } else {
+                    node_modules.join(name)
+                };
+                
+                if package_dir.exists() {
+                    let package_json = package_dir.join("package.json");
+                    if package_json.exists() {
+                        let content = fs::read_to_string(&package_json)?;
+                        let pkg: serde_json::Value = serde_json::from_str(&content)?;
+                        
+                        let main = pkg.get("main")
+                            .and_then(|m| m.as_str())
+                            .unwrap_or("index.js");
+                        
+                        let entry = package_dir.join(main);
+                        if entry.exists() {
+                            return Ok(entry.to_string_lossy().to_string());
+                        }
+                    }
+                    
+                    let index = package_dir.join("index.js");
+                    if index.exists() {
+                        return Ok(index.to_string_lossy().to_string());
+                    }
+                }
+            }
             
-            let entry = package_dir.join(main);
-            if entry.exists() {
-                return Ok(entry.to_string_lossy().to_string());
+            if !current.pop() {
+                break;
             }
         }
         
-        // Default to index.js
-        let index = package_dir.join("index.js");
-        if index.exists() {
-            return Ok(index.to_string_lossy().to_string());
-        }
+        Err(anyhow!("Package not found: {}", name))
+    }
 
-        Err(anyhow!("Cannot resolve entry point for {}", name))
+    /// Resolve package path from node_modules (uses cwd)
+    pub fn resolve_package(&self, name: &str) -> Result<String> {
+        let cwd = std::env::current_dir()?;
+        Self::resolve_package_in_dir(name, &cwd)
     }
 }
 
