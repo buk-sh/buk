@@ -4,6 +4,7 @@ mod env_loader;
 mod fetch;
 mod http_native;
 mod module;
+mod package_manager;
 mod runtime;
 mod server;
 mod typescript;
@@ -11,6 +12,7 @@ mod watcher;
 
 use anyhow::Result;
 use env_loader::EnvLoader;
+use package_manager::PackageManager;
 use runtime::JsRuntime;
 use std::env;
 use std::fs;
@@ -22,6 +24,8 @@ Usage:
   runt <file.js|file.ts>     Run a JavaScript or TypeScript file
   runt run <file>            Run a file (explicit)
   runt serve <file>          Run a file with Bun.serve()
+  runt i <package>           Install npm package (like bun i)
+  runt install <package>     Install npm package
   runt --watch <file>        Run with hot reload
   runt --env <file>          Load .env file before running
   runt test <pattern>        Run tests
@@ -46,6 +50,7 @@ async fn main() -> Result<()> {
     let mut watch_mode = false;
     let mut command = String::new();
     let mut filename = String::new();
+    let mut install_package = String::new();
 
     // Parse arguments
     let mut i = 1;
@@ -59,17 +64,36 @@ async fn main() -> Result<()> {
                 println!("{}", HELP);
                 return Ok(());
             }
+            "i" | "install" => {
+                command = args[i].clone();
+                i += 1;
+                if i < args.len() && !args[i].starts_with("--") {
+                    install_package = args[i].clone();
+                    i += 1;
+                }
+            }
             "run" | "serve" | "test" => {
                 command = args[i].clone();
                 i += 1;
             }
             _ => {
-                if filename.is_empty() && !args[i].starts_with("--") {
+                if filename.is_empty() && !args[i].starts_with("--") && command != "i" && command != "install" {
                     filename = args[i].clone();
                 }
                 i += 1;
             }
         }
+    }
+
+    // Handle install command
+    if command == "i" || command == "install" {
+        if install_package.is_empty() {
+            println!("Usage: runt i <package>");
+            return Ok(());
+        }
+        let pm = PackageManager::new();
+        pm.install(&install_package).await?;
+        return Ok(());
     }
 
     if filename.is_empty() {
