@@ -2,38 +2,64 @@ use std::fs;
 use std::path::Path;
 use v8;
 
+/// This module implements the Bun API,
+/// Which provides various utility functions to JavaScript code running in the V8 engine.
 pub struct BunAPI;
 
+
+/// Implementation of the Bun API.
 impl BunAPI {
+    /// This function initializes the Bun API by creating a new object template and setting various functions and properties on it.
     pub fn init<'s>(scope: &mut v8::HandleScope<'s>, global: v8::Local<'s, v8::Object>) {
+        /// We create a new object template for the Bun API, which will hold all the functions and properties we want to expose.
         let bun_template = v8::ObjectTemplate::new(scope);
 
+        // We then define various functions on the Bun API, such as Bun.file, Bun.write, Bun.which, etc.
+        // ** Each function does not start with Bun.* anymore. they start with Buk.* to avoid confusion with the actual Bun runtime.
+        // We can change this back to Bun.* later if we want, 
+        // but for now we will use Buk.* to make it clear that this is our own implementation of the API, not the actual Bun runtime.
+        
         // Bun.file(path) - returns a BunFile object
-        let name = v8::String::new(scope, "file").unwrap();
-        let func = v8::FunctionTemplate::new(scope, bun_file);
-        bun_template.set(name.into(), func.into());
+        let name = v8::String::new(scope, "file").unwrap();         /// Function name is "file", which will be called as 
+                                                                    /// Buk.file("path/to/file") in JavaScript. This function will 
+                                                                    // return a BunFile object that has methods like exists(), text(), json(), 
+                                                                    // and size() to interact with the file.
+
+        let func = v8::FunctionTemplate::new(scope, bun_file);      // We create the function template for the "file" function, 
+                                                                    // which will call the bun_file Rust function when invoked from JavaScript.
+        bun_template.set(name.into(), func.into());                 // We set the "file" function on the bun_template, so it becomes a method
+                                                                    // of the Bun API.
 
         // Bun.write(path, data) - writes file
-        let name = v8::String::new(scope, "write").unwrap();
-        let func = v8::FunctionTemplate::new(scope, bun_write);
-        bun_template.set(name.into(), func.into());
+        let name = v8::String::new(scope, "write").unwrap();        // Function name is "write", which will be called as Buk.write("path/to/file", "data to write") in JavaScript. 
+                                                                    // This function will write the specified data to the specified file path.
+        let func = v8::FunctionTemplate::new(scope, bun_write);     // We create the function template for the "write" function, 
+                                                                    // which will call the bun_write Rust function when invoked from JavaScript.
+        bun_template.set(name.into(), func.into());                 // We set the "write" function on the bun_template, so it becomes a method 
+                                                                    // of the Bun API.
 
         // Bun.which(cmd) - find executable
-        let name = v8::String::new(scope, "which").unwrap();
-        let func = v8::FunctionTemplate::new(scope, bun_which);
-        bun_template.set(name.into(), func.into());
+        let name = v8::String::new(scope, "which").unwrap();        // Function name is "which", which will be called as Buk.which("command") in JavaScript. 
+                                                                    // This function will search the system PATH for the specified command and return its full path if found.
+        let func = v8::FunctionTemplate::new(scope, bun_which);     // We create the function template for the "which" function, 
+                                                                    // which will call the bun_which Rust function when invoked from JavaScript.
+        bun_template.set(name.into(), func.into());                 // We set the "which" function on the bun_template, so it becomes a method of the Bun API.
 
         // Bun.sleep(ms) - sleep for milliseconds
-        let name = v8::String::new(scope, "sleep").unwrap();
-        let func = v8::FunctionTemplate::new(scope, bun_sleep);
-        bun_template.set(name.into(), func.into());
+        let name = v8::String::new(scope, "sleep").unwrap();        /// Function name is "sleep", which will be called as Buk.sleep(1000) in JavaScript to sleep for 1000 milliseconds (1 second). 
+                                                                    /// This function will block the current thread for the specified duration.
+        let func = v8::FunctionTemplate::new(scope, bun_sleep);     // We create the function template for the "sleep" function, which will call the bun_sleep Rust function when invoked from JavaScript.
+        bun_template.set(name.into(), func.into());                 // We set the "sleep" function on the bun_template, so it becomes a method of the Bun API.
 
         // Bun.cwd() - current working directory
-        let name = v8::String::new(scope, "cwd").unwrap();
-        let func = v8::FunctionTemplate::new(scope, bun_cwd);
-        bun_template.set(name.into(), func.into());
+        let name = v8::String::new(scope, "cwd").unwrap();          /// Function name is "cwd", which will be called as Buk.cwd() in JavaScript to get the current working directory. 
+                                                                    /// This function will return the current working directory as a string.
+        let func = v8::FunctionTemplate::new(scope, bun_cwd);       // We create the function template for the "cwd" function, which will call the bun_cwd Rust function when invoked from JavaScript.
+        bun_template.set(name.into(), func.into());                 // We set the "cwd" function on the bun_template, so it becomes a method of the Bun API.
 
-        let bun_obj = bun_template.new_instance(scope).unwrap();
+        let bun_obj = bun_template.new_instance(scope).unwrap();    /// We create a new instance of the bun_template, which will be the 
+                                                                    /// actual Bun API object that we expose to JavaScript. 
+                                                                    /// We will set various properties on this object, such as env and main.
 
         // Bun.env - environment variables (set after creation)
         let env_template = v8::ObjectTemplate::new(scope);
