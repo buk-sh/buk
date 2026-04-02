@@ -1,7 +1,7 @@
 // http-native framework demo
 
 async function main() {
-    const app = createApp();
+    const app = HttpNative.createApp();
 
     // Basic routes
     app.get("/", async (req, res) => {
@@ -39,7 +39,7 @@ async function main() {
     
     // Keep the process alive
     while (true) {
-        Bun.sleep(1000);
+        Buk.sleep(1000);
     }
 }
 

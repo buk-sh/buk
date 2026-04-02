@@ -17,11 +17,18 @@ pub struct HttpNativeFramework;
 
 impl HttpNativeFramework {
     pub fn init<'s>(scope: &mut v8::HandleScope<'s>, global: v8::Local<'s, v8::Object>) {
-        // createApp() function
+        // Create HttpNative object
+        let http_native = v8::Object::new(scope);
+        
+        // HttpNative.createApp() method
         let name = v8::String::new(scope, "createApp").unwrap();
         let func = v8::FunctionTemplate::new(scope, create_app);
         let func = func.get_function(scope).unwrap();
-        global.set(scope, name.into(), func.into());
+        http_native.set(scope, name.into(), func.into());
+        
+        // Add HttpNative to global
+        let key = v8::String::new(scope, "HttpNative").unwrap();
+        global.set(scope, key.into(), http_native.into());
     }
 }
 
