@@ -165,7 +165,7 @@ impl LockFile {
     pub fn load() -> Result<Self> {
         /// The lock file is named "runt.lock" to avoid confusion with npm's package-lock.json.
         /// It serves a similar purpose but is specific to runt's package management.
-        /// It is possible that we may renae the lock file file to buk.lock.
+        /// It is possible that we may rename the lock file file to buk.lock.
         let path = Path::new("runt.lock");
         if !path.exists() {
             return Ok(Self::new());
