@@ -1,4 +1,6 @@
+use crate::bun_api::BunAPI;
 use crate::console::ConsoleAPI;
+use crate::server::BunServer;
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::sync::Once;
@@ -49,6 +51,8 @@ impl JsRuntime {
         let global = scope.get_current_context().global(scope);
 
         ConsoleAPI::init(scope, global);
+        BunAPI::init(scope, global);
+        BunServer::init(scope, global);
     }
 
     pub fn execute_cached(&mut self, name: &str, source: &str) -> Result<()> {
