@@ -4,6 +4,7 @@ mod env_loader;
 mod fetch;
 mod http_native;
 mod module;
+mod package_json;
 mod package_manager;
 mod runtime;
 mod server;
@@ -21,15 +22,24 @@ use typescript::TypeScriptTranspiler;
 const HELP: &str = r#"Runt - A fast JavaScript runtime
 
 Usage:
-  runt <file.js|file.ts>     Run a JavaScript or TypeScript file
-  runt run <file>            Run a file (explicit)
-  runt serve <file>          Run a file with Bun.serve()
-  runt i <package>           Install npm package (like bun i)
-  runt install <package>     Install npm package
-  runt --watch <file>        Run with hot reload
-  runt --env <file>          Load .env file before running
-  runt test <pattern>        Run tests
-  runt --help                Show this help
+  runt <file.js|file.ts>           Run a JavaScript or TypeScript file
+  runt run <file>                  Run a file (explicit)
+  runt serve <file>                Run a file with Bun.serve()
+  runt test <pattern>              Run tests
+  
+Package Manager:
+  runt init [name]                 Initialize a new project
+  runt i <package> [packages...]   Install npm packages
+  runt install <pkg> [-D|--dev]    Install with dev flag
+  runt remove <package>            Remove a package
+  runt uninstall <package>         Alias for remove
+  runt list                        List installed packages
+  runt run <script>                Run a package.json script
+  
+Options:
+  runt --watch <file>              Run with hot reload
+  runt --env <file>                Load .env file before running
+  runt --help                      Show this help
 
 Environment:
   Runt loads .env and .env.local automatically
@@ -50,7 +60,9 @@ async fn main() -> Result<()> {
     let mut watch_mode = false;
     let mut command = String::new();
     let mut filename = String::new();
-    let mut install_package = String::new();
+    let mut install_packages: Vec<String> = Vec::new();
+    let mut dev_flag = false;
+    let mut script_name = String::new();
 
     // Parse arguments
     let mut i = 1;
@@ -64,20 +76,53 @@ async fn main() -> Result<()> {
                 println!("{}", HELP);
                 return Ok(());
             }
-            "i" | "install" => {
+            "-D" | "--dev" => {
+                dev_flag = true;
+                i += 1;
+            }
+            "init" => {
                 command = args[i].clone();
                 i += 1;
-                if i < args.len() && !args[i].starts_with("--") {
-                    install_package = args[i].clone();
+                if i < args.len() && !args[i].starts_with("--") && !args[i].starts_with("-") {
+                    filename = args[i].clone();
                     i += 1;
                 }
             }
-            "run" | "serve" | "test" => {
+            "i" | "install" => {
+                command = args[i].clone();
+                i += 1;
+                // Collect all packages to install
+                while i < args.len() && !args[i].starts_with("--") && !args[i].starts_with("-") {
+                    install_packages.push(args[i].clone());
+                    i += 1;
+                }
+            }
+            "remove" | "uninstall" => {
+                command = args[i].clone();
+                i += 1;
+                if i < args.len() && !args[i].starts_with("--") {
+                    filename = args[i].clone();
+                    i += 1;
+                }
+            }
+            "list" => {
+                command = args[i].clone();
+                i += 1;
+            }
+            "run" => {
+                command = args[i].clone();
+                i += 1;
+                if i < args.len() && !args[i].starts_with("--") {
+                    script_name = args[i].clone();
+                    i += 1;
+                }
+            }
+            "serve" | "test" => {
                 command = args[i].clone();
                 i += 1;
             }
             _ => {
-                if filename.is_empty() && !args[i].starts_with("--") && command != "i" && command != "install" {
+                if filename.is_empty() && !args[i].starts_with("--") {
                     filename = args[i].clone();
                 }
                 i += 1;
@@ -85,14 +130,49 @@ async fn main() -> Result<()> {
         }
     }
 
+    // Handle init command
+    if command == "init" {
+        let pm = PackageManager::new();
+        let name = if filename.is_empty() { None } else { Some(filename.as_str()) };
+        pm.init(name)?;
+        return Ok(());
+    }
+
     // Handle install command
     if command == "i" || command == "install" {
-        if install_package.is_empty() {
-            println!("Usage: runt i <package>");
+        let mut pm = PackageManager::new();
+        if install_packages.is_empty() {
+            // Install all from package.json
+            pm.install(&[], dev_flag).await?;
+        } else {
+            // Install specific packages
+            pm.install(&install_packages, dev_flag).await?;
+        }
+        return Ok(());
+    }
+
+    // Handle remove/uninstall command
+    if command == "remove" || command == "uninstall" {
+        if filename.is_empty() {
+            println!("Usage: runt {} <package>", command);
             return Ok(());
         }
+        let mut pm = PackageManager::new();
+        pm.remove(&filename).await?;
+        return Ok(());
+    }
+
+    // Handle list command
+    if command == "list" {
         let pm = PackageManager::new();
-        pm.install(&install_package).await?;
+        pm.list()?;
+        return Ok(());
+    }
+
+    // Handle run command (package.json scripts)
+    if command == "run" && !script_name.is_empty() {
+        let pm = PackageManager::new();
+        pm.run_script(&script_name)?;
         return Ok(());
     }
 
