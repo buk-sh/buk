@@ -282,7 +282,8 @@ impl PackageManager {
         } else if spec.starts_with('@') {
             // Scoped package @scope/name@version
             let at_parts: Vec<&str> = spec.rsplitn(2, '@').collect();
-            if at_parts.len() == 2 && at_parts[0].contains('/') {
+            if at_parts.len() == 2 && at_parts[1].contains('/') {
+                // at_parts[0] = version, at_parts[1] = @scope/name
                 (at_parts[1].to_string(), at_parts[0].to_string())
             } else {
                 (spec.to_string(), "latest".to_string())

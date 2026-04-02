@@ -321,7 +321,7 @@ fn resolve_and_load<'s>(
     module_name: &str,
     base_dir: &str,
 ) -> Result<v8::Local<'s, v8::Object>> {
-    if module_name == "fs" || module_name == "path" || module_name == "http" {
+    if module_name == "fs" || module_name == "path" || module_name == "http" || module_name == "querystring" {
         return create_builtin_module(scope, module_name);
     }
 
@@ -607,13 +607,21 @@ fn create_builtin_module<'s>(
             module.set(scope, name.into(), func.into());
         }
         "http" => {
-            let msg = v8::String::new(
-                scope,
-                "HTTP module - use Bun.serve() or createApp() instead",
-            )
-            .unwrap();
+            let create_server = v8::FunctionTemplate::new(scope, http_create_server);
             let name = v8::String::new(scope, "createServer").unwrap();
-            module.set(scope, name.into(), msg.into());
+            let func = create_server.get_function(scope).unwrap();
+            module.set(scope, name.into(), func.into());
+        }
+        "querystring" => {
+            let parse = v8::FunctionTemplate::new(scope, querystring_parse);
+            let name = v8::String::new(scope, "parse").unwrap();
+            let func = parse.get_function(scope).unwrap();
+            module.set(scope, name.into(), func.into());
+            
+            let stringify = v8::FunctionTemplate::new(scope, querystring_stringify);
+            let name = v8::String::new(scope, "stringify").unwrap();
+            let func = stringify.get_function(scope).unwrap();
+            module.set(scope, name.into(), func.into());
         }
         _ => {}
     }
@@ -695,3 +703,133 @@ fn path_join<'s>(
     let result = v8::String::new(scope, &joined).unwrap();
     rv.set(result.into());
 }
+
+fn http_create_server<'s>(
+    scope: &mut v8::HandleScope<'s>,
+    args: v8::FunctionCallbackArguments<'s>,
+    mut rv: v8::ReturnValue,
+) {
+    // Create a server object with methods
+    let server = v8::Object::new(scope);
+    
+    // Store the request handler if provided
+    if args.length() > 0 && args.get(0).is_function() {
+        let handler_key = v8::String::new(scope, "__handler").unwrap();
+        server.set(scope, handler_key.into(), args.get(0));
+    }
+    
+    // Add listen method
+    let listen_template = v8::FunctionTemplate::new(scope, http_server_listen);
+    let listen_func = listen_template.get_function(scope).unwrap();
+    let listen_key = v8::String::new(scope, "listen").unwrap();
+    server.set(scope, listen_key.into(), listen_func.into());
+    
+    // Add on method (event handler stub)
+    let on_template = v8::FunctionTemplate::new(scope, http_server_on);
+    let on_func = on_template.get_function(scope).unwrap();
+    let on_key = v8::String::new(scope, "on").unwrap();
+    server.set(scope, on_key.into(), on_func.into());
+    
+    rv.set(server.into());
+}
+
+fn http_server_listen<'s>(
+    scope: &mut v8::HandleScope<'s>,
+    args: v8::FunctionCallbackArguments<'s>,
+    mut rv: v8::ReturnValue,
+) {
+    // Get port from args
+    let port = if args.length() > 0 {
+        args.get(0).to_int32(scope).map(|v| v.value()).unwrap_or(3000)
+    } else {
+        3000
+    };
+    
+    println!("🚀 HTTP server listening on port {}", port);
+    
+    // Call callback if provided
+    if args.length() > 1 {
+        let callback = args.get(1);
+        if callback.is_function() {
+            let func = v8::Local::<v8::Function>::try_from(callback).unwrap();
+            let recv = v8::undefined(scope);
+            let undefined = v8::undefined(scope);
+            func.call(scope, recv.into(), &[undefined.into()]);
+        }
+    }
+    
+    rv.set(v8::undefined(scope).into());
+}
+
+fn http_server_on<'s>(
+    scope: &mut v8::HandleScope<'s>,
+    _args: v8::FunctionCallbackArguments<'s>,
+    mut rv: v8::ReturnValue,
+) {
+    // Stub for event listener - just return server for chaining
+    rv.set(v8::undefined(scope).into());
+}
+
+fn querystring_parse<'s>(
+    scope: &mut v8::HandleScope<'s>,
+    args: v8::FunctionCallbackArguments<'s>,
+    mut rv: v8::ReturnValue,
+) {
+    if args.length() < 1 {
+        rv.set(v8::Object::new(scope).into());
+        return;
+    }
+    
+    let str = args.get(0).to_string(scope).unwrap().to_rust_string_lossy(scope);
+    let obj = v8::Object::new(scope);
+    
+    for pair in str.split('&') {
+        if let Some(eq) = pair.find('=') {
+            let key = &pair[..eq];
+            let value = &pair[eq + 1..];
+            let key_str = v8::String::new(scope, key).unwrap();
+            let val_str = v8::String::new(scope, value).unwrap();
+            obj.set(scope, key_str.into(), val_str.into());
+        } else if !pair.is_empty() {
+            let key_str = v8::String::new(scope, pair).unwrap();
+            let val_str = v8::String::new(scope, "").unwrap();
+            obj.set(scope, key_str.into(), val_str.into());
+        }
+    }
+    
+    rv.set(obj.into());
+}
+
+fn querystring_stringify<'s>(
+    scope: &mut v8::HandleScope<'s>,
+    args: v8::FunctionCallbackArguments<'s>,
+    mut rv: v8::ReturnValue,
+) {
+    if args.length() < 1 {
+        rv.set(v8::String::new(scope, "").unwrap().into());
+        return;
+    }
+    
+    let obj = args.get(0).to_object(scope).unwrap_or(v8::Object::new(scope));
+    let mut pairs = Vec::new();
+    
+    if let Some(keys) = obj.get_own_property_names(scope, v8::GetPropertyNamesArgs::default()) {
+        for i in 0..keys.length() {
+            if let Some(key) = keys.get_index(scope, i) {
+                if let Some(key_str) = key.to_string(scope) {
+                    let key = key_str.to_rust_string_lossy(scope);
+                    if let Some(val) = obj.get(scope, key_str.into()) {
+                        if let Some(val_str) = val.to_string(scope) {
+                            let val = val_str.to_rust_string_lossy(scope);
+                            pairs.push(format!("{}={}", key, val));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    let result = pairs.join("&");
+    rv.set(v8::String::new(scope, &result).unwrap().into());
+}
+
