@@ -1,19 +1,32 @@
 use crate::console::ConsoleAPI;
 use anyhow::{anyhow, Result};
+use std::collections::HashMap;
+use std::sync::Once;
 use v8;
+
+static INIT: Once = Once::new();
 
 pub struct JsRuntime {
     isolate: v8::OwnedIsolate,
     context: v8::Global<v8::Context>,
+    compiled_cache: HashMap<String, v8::Global<v8::UnboundScript>>,
 }
 
 impl JsRuntime {
     pub fn new() -> Self {
-        let platform = v8::new_default_platform(0, false).make_shared();
-        v8::V8::initialize_platform(platform);
-        v8::V8::initialize();
+        INIT.call_once(|| {
+            let platform = v8::new_default_platform(4, true).make_shared();
+            v8::V8::initialize_platform(platform);
+            v8::V8::initialize();
+        });
 
-        let mut isolate = v8::Isolate::new(Default::default());
+        let params = v8::CreateParams::default()
+            .heap_limits(0, 512 * 1024 * 1024);
+
+        let mut isolate = v8::Isolate::new(params);
+        
+        isolate.set_capture_stack_trace_for_uncaught_exceptions(true, 10);
+
         let global_context = {
             let handle_scope = &mut v8::HandleScope::new(&mut isolate);
             let context = v8::Context::new(handle_scope);
@@ -23,6 +36,7 @@ impl JsRuntime {
         let mut runtime = Self {
             isolate,
             context: global_context,
+            compiled_cache: HashMap::new(),
         };
 
         runtime.init_bindings();
@@ -37,16 +51,49 @@ impl JsRuntime {
         ConsoleAPI::init(scope, global);
     }
 
-    pub async fn execute(&mut self, source: &str) -> Result<()> {
+    pub fn execute_cached(&mut self, name: &str, source: &str) -> Result<()> {
         let context = self.context.clone();
         let scope = &mut v8::HandleScope::with_context(&mut self.isolate, context);
-        let handle_scope = &mut v8::EscapableHandleScope::new(scope);
-        let try_catch = &mut v8::TryCatch::new(handle_scope);
+        
+        let code = v8::String::new(scope, source)
+            .ok_or_else(|| anyhow!("Failed to create string"))?;
+        let resource_name = v8::String::new(scope, name).unwrap();
+        let source_map_url = v8::undefined(scope);
+        
+        let origin = v8::ScriptOrigin::new(
+            scope,
+            resource_name.into(),
+            0,
+            0,
+            false,
+            0,
+            source_map_url.into(),
+            false,
+            false,
+            false,
+        );
 
-        let code = v8::String::new(try_catch, source).ok_or_else(|| anyhow!("Failed to create string"))?;
+        let script = v8::Script::compile(scope, code, Some(&origin))
+            .ok_or_else(|| anyhow!("Failed to compile script"))?;
+        
+        script.run(scope);
+        Ok(())
+    }
+
+    pub async fn execute(&mut self, source: &str) -> Result<()> {
+        self.execute_cached("<script>", source)
+    }
+
+    pub fn execute_optimized(&mut self, source: &str, optimize_for_size: bool) -> Result<()> {
+        let context = self.context.clone();
+        let scope = &mut v8::HandleScope::with_context(&mut self.isolate, context);
+        let try_catch = &mut v8::TryCatch::new(scope);
+
+        let code = v8::String::new(try_catch, source)
+            .ok_or_else(|| anyhow!("Failed to create string"))?;
+        
         let resource_name = v8::String::new(try_catch, "<script>").unwrap();
-        let source_map_url = v8::String::new(try_catch, "").unwrap();
-
+        let source_map_url = v8::undefined(try_catch);
         let origin = v8::ScriptOrigin::new(
             try_catch,
             resource_name.into(),
@@ -56,7 +103,7 @@ impl JsRuntime {
             0,
             source_map_url.into(),
             false,
-            false,
+            optimize_for_size,
             false,
         );
 
@@ -79,6 +126,6 @@ impl JsRuntime {
 
 impl Drop for JsRuntime {
     fn drop(&mut self) {
-        // V8 cleanup happens at program exit, not per-isolate
+        self.compiled_cache.clear();
     }
 }

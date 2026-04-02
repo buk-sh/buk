@@ -4,7 +4,6 @@ mod module;
 mod runtime;
 
 use crate::console::ConsoleAPI;
-use crate::fetch::FetchAPI;
 use anyhow::Result;
 use runtime::JsRuntime;
 use std::env;
@@ -16,11 +15,6 @@ async fn main() -> Result<()> {
 
     if args.len() < 2 {
         println!("Usage: runt <script.js>");
-        let mut runtime = JsRuntime::new();
-        let scope = runtime.scope();
-        let global = runtime.global();
-        ConsoleAPI::init(scope, global);
-        FetchAPI::init(scope, global);
         return Ok(());
     }
 
