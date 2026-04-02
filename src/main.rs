@@ -2,6 +2,7 @@ mod bun_api;
 mod console;
 mod env_loader;
 mod fetch;
+mod http_native;
 mod module;
 mod runtime;
 mod server;

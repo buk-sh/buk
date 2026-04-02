@@ -1,5 +1,6 @@
 use crate::bun_api::BunAPI;
 use crate::console::ConsoleAPI;
+use crate::http_native::HttpNativeFramework;
 use crate::server::BunServer;
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
@@ -53,6 +54,7 @@ impl JsRuntime {
         ConsoleAPI::init(scope, global);
         BunAPI::init(scope, global);
         BunServer::init(scope, global);
+        HttpNativeFramework::init(scope, global);
     }
 
     pub fn execute_cached(&mut self, name: &str, source: &str) -> Result<()> {
