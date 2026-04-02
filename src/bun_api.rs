@@ -53,7 +53,7 @@ impl BunAPI {
             bun_obj.set(scope, name.into(), main_str.into());
         }
 
-        let bun_key = v8::String::new(scope, "Bun").unwrap();
+        let bun_key = v8::String::new(scope, "Buk").unwrap();
         global.set(scope, bun_key.into(), bun_obj.into());
     }
 }
