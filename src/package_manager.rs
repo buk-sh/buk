@@ -26,7 +26,7 @@ impl PackageManager {
         }
     }
 
-    /// Install packages (one or more)
+    // Install packages (one or more)
     pub async fn install(&mut self, packages: &[String], dev: bool) -> Result<()> {
         let mut package_json = PackageJson::load().unwrap_or_else(|_| {
             println!("📦 No package.json found, creating one...");
@@ -51,7 +51,7 @@ impl PackageManager {
         Ok(())
     }
 
-    /// Install a single package
+    // Install a single package
     async fn install_single(&mut self, package_json: &mut PackageJson, package_spec: &str, dev: bool) -> Result<()> {
         let (name, version_req) = self.parse_package_spec(package_spec);
         
@@ -102,7 +102,7 @@ impl PackageManager {
         Ok(())
     }
 
-    /// Install all dependencies from package.json
+    // Install all dependencies from package.json
     async fn install_all(&mut self, package_json: &PackageJson) -> Result<()> {
         let deps = package_json.get_all_dependencies();
         
@@ -122,7 +122,7 @@ impl PackageManager {
         Ok(())
     }
 
-    /// Remove a package
+    // Remove a package
     pub async fn remove(&mut self, package_name: &str) -> Result<()> {
         let mut package_json = PackageJson::load()?;
         
@@ -148,7 +148,7 @@ impl PackageManager {
         Ok(())
     }
 
-    /// Run a package.json script
+    // Run a package.json script
     pub fn run_script(&self, script_name: &str) -> Result<()> {
         let package_json = PackageJson::load()?;
         
@@ -177,7 +177,7 @@ impl PackageManager {
         Ok(())
     }
 
-    /// List installed packages
+    // List installed packages
     pub fn list(&self) -> Result<()> {
         let package_json = PackageJson::load()?;
         
@@ -207,7 +207,7 @@ impl PackageManager {
         }
     }
 
-    /// Initialize a new project
+    // Initialize a new project
     pub fn init(&self, name: Option<&str>) -> Result<()> {
         if PackageJson::exists() {
             return Err(anyhow!("package.json already exists"));
@@ -232,7 +232,7 @@ impl PackageManager {
         Ok(())
     }
 
-    /// Fetch package metadata from npm
+    // Fetch package metadata from npm
     async fn fetch_metadata(&self, name: &str) -> Result<PackageMetadata> {
         let url = format!("{}/{}", NPM_REGISTRY, name);
         
@@ -246,7 +246,7 @@ impl PackageManager {
         Ok(metadata)
     }
 
-    /// Resolve version from version requirement
+    // Resolve version from version requirement
     fn resolve_version(&self, metadata: &PackageMetadata, version_req: &str) -> Result<String> {
         if version_req == "latest" || version_req == "*" {
             metadata.dist_tags.get("latest")
@@ -274,7 +274,7 @@ impl PackageManager {
         }
     }
 
-    /// Parse package specification (name@version or just name)
+    // Parse package specification (name@version or just name)
     fn parse_package_spec(&self, spec: &str) -> (String, String) {
         if spec.contains('@') && !spec.starts_with('@') {
             let parts: Vec<&str> = spec.splitn(2, '@').collect();
@@ -293,7 +293,7 @@ impl PackageManager {
         }
     }
 
-    /// Download and extract package tarball
+    // Download and extract package tarball
     async fn download_and_extract(&self, name: &str, version: &str, tarball_url: &str) -> Result<()> {
         // Download
         println!("  Downloading...");
@@ -344,7 +344,7 @@ impl PackageManager {
         Ok(())
     }
 
-    /// Resolve package path from node_modules
+    // Resolve package path from node_modules
     pub fn resolve_package_in_dir(name: &str, from_dir: &Path) -> Result<String> {
         let mut current = from_dir.to_path_buf();
         
@@ -394,7 +394,7 @@ impl PackageManager {
         Err(anyhow!("Package not found: {}", name))
     }
 
-    /// Resolve package path from node_modules (uses cwd)
+    // Resolve package path from node_modules (uses cwd)
     pub fn resolve_package(&self, name: &str) -> Result<String> {
         let cwd = std::env::current_dir()?;
         Self::resolve_package_in_dir(name, &cwd)
